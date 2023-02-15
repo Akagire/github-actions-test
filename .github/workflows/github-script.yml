@@ -9,6 +9,13 @@ on:
     branches:
       - main
 
+env:
+  GIT_USER_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+  GIT_USER_NAME: "github-actions[bot]"
+  BRANCH_NAME: workflow/bump-version
+  PR_BODY: "Bump dependency packages version."
+  PR_TITLE: "[bot] Bump dependency packages version."
+
 jobs:
   create-pullrequest:
     permissions:
@@ -27,23 +34,37 @@ jobs:
 
       - name: GitHub Author config
         run: |
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com" && \
-          git config --global user.name "github-actions[bot]"
+          git config --global user.email '${{ env.GIT_USER_EMAIL }}' && \
+          git config --global user.name '${{ env.GIT_USER_NAME }}'
 
-      - name: Create Working branch
+      - name: Check branch exists
         run: |
-          git checkout -b workflow/bump-version
+          branch_is_existing=$(
+            git fetch origin ${{ env.BRANCH_NAME }} &&
+            echo true ||
+            echo false
+          )
+          echo "BRANCH_EXISTS=${branch_is_existing}" >> $GITHUB_ENV
 
-      - name: Auto increment patch version
-        run: yarn version --patch --no-git-tag-version
-
-      - name: Commit & Push
+      - name: Create Working branch and bump version when not exists
+        if: env.BRANCH_EXISTS == 'false'
         run: |
+          git checkout -b ${{ env.BRANCH_NAME }} && \
+          yarn version --patch --no-git-tag-version && \
           git add package.json && \
           git commit -m '[bot] bump version' && \
           git push -u origin HEAD
 
-      - name: Open Pull Request
-        uses: peter-evans/create-pull-request@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull and rebase working branch when exists
+        if: env.BRANCH_EXISTS == 'true'
+        run: |
+          git switch ${{ env.BRANCH_NAME }} && \
+          git pull --rebase origin main && \
+          git push --force-with-lease
+
+      - name: Create or Update pull request
+        run: |
+          gh pr edit ${{ env.BRANCH_NAME }} -b '${{ env.PR_BODY }}' -t '${{ env.PR_TITLE }}' && \
+          gh pr reopen ${{ env.BRANCH_NAME }} || gh pr create -b main -t '${{ env.PR_TITLE }}' -b '${{ env.PR_BODY }}'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
