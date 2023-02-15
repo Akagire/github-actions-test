@@ -9,6 +9,9 @@ on:
     branches:
       - main
 
+env:
+  BRANCH_NAME: workflow/bump-version
+
 jobs:
   create-pullrequest:
     permissions:
@@ -30,20 +33,40 @@ jobs:
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com" && \
           git config --global user.name "github-actions[bot]"
 
-      - name: Create Working branch
+      - name: Check branch exists
         run: |
-          git checkout -b workflow/bump-version
+          branch_is_existing=$(
+            git fetch origin ${{ env.BRANCH_NAME }} &&
+            echo true ||
+            echo false
+          )
+          echo "BRANCH_EXISTS=${branch_is_existing}" >> $GITHUB_ENV
 
-      - name: Auto increment patch version
+      - name: Create Working branch when not exists
+        if: env.BRANCH_EXISTS == 'false'
+        run: git checkout -b ${{ env.BRANCH_NAME }}
+
+      - name: Auto increment patch version when branch created
+        if: env.BRANCH_EXISTS == 'false'
         run: yarn version --patch --no-git-tag-version
 
       - name: Commit & Push
+        if: env.BRANCH_EXISTS == 'false'
         run: |
           git add package.json && \
           git commit -m '[bot] bump version' && \
           git push -u origin HEAD
 
-      - name: Open Pull Request
-        uses: peter-evans/create-pull-request@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Pull Request
+        if: env.BRANCH_EXISTS == 'false'
+        run: |
+          gh pr create --base "main" --title "[Bot] Bump version" --body ""
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and rebase working branch when exists
+        if: env.BRANCH_EXISTS == 'true'
+        run: |
+          git switch ${{ env.BRANCH_NAME }} && \
+          git pull --rebase origin main && \
+          git push --force-with-lease
