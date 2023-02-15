@@ -68,3 +68,10 @@ jobs:
           gh pr reopen ${{ env.BRANCH_NAME }} || gh pr create -b main -t '${{ env.PR_TITLE }}' -b '${{ env.PR_BODY }}'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto Approve and merge pull request
+        run: |
+          gh pr review ${{ env.BRANCH_NAME }} -a && \
+          gh pr merge ${{ env.BRANCH_NAME }} -m -d
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
